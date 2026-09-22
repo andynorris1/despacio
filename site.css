@@ -1,0 +1,93 @@
+:root {
+  --bg: #000000;
+  --ink: #FFFFFF;
+  --muted: #9A9A9A;
+  --line: #2A2A2A;
+  --font: "League Spartan", "Helvetica Neue", Arial, sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font: 400 1.0625rem/1.45 var(--font); }
+button { font: inherit; color: inherit; }
+a { color: inherit; }
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+.site { max-width: 1040px; margin: 0 auto; padding: 2.5rem 1.25rem 4rem; }
+
+.site-title { display: inline-block; margin: 0 0 3rem; font-size: 1.25rem; font-weight: 700; letter-spacing: .08em; text-decoration: none; }
+
+h1 { margin: 0; font-size: clamp(2rem, 6vw, 3rem); font-weight: 700; line-height: 1.05; }
+
+
+.event { margin: .5rem 0 0; color: var(--muted); }
+
+/* City list on the left */
+.layout { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 3rem; align-items: start; }
+.cities { position: sticky; top: 1.5rem; max-height: calc(100vh - 3rem); overflow-y: auto; }
+.cities ul { list-style: none; margin: 0; padding: 0; }
+.cities summary, .cities .city { display: block; padding: .3rem 0; color: var(--muted); text-decoration: none; }
+.cities summary { cursor: pointer; list-style: none; }
+.cities summary::-webkit-details-marker { display: none; }
+.cities .city:hover, .cities summary:hover { color: var(--ink); }
+.cities summary[aria-current="page"] { color: var(--ink); font-weight: 700; }
+.cities .dates { padding: .1rem 0 .5rem 1rem; }
+.cities .dates a { display: block; padding: .2rem 0; color: var(--muted); text-decoration: none; font-variant-numeric: tabular-nums; }
+.cities .dates a:hover { color: var(--ink); }
+.cities .dates a.active { color: var(--ink); font-weight: 600; }
+
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+.day, .track { scroll-margin-top: 1.5rem; }
+
+.day { margin: 2.5rem 0 0; font-size: 1rem; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+.day + .tracks { margin-top: .75rem; }
+
+/* Setlist */
+.tracks { list-style: none; margin: 2.5rem 0 0; padding: 0; border-top: 1px solid var(--line); }
+.track {
+  display: grid; grid-template-columns: 2.25rem minmax(0, 1fr) auto; gap: .25rem 1rem;
+  align-items: baseline; padding: .85rem 0; border-bottom: 1px solid var(--line);
+}
+.pos { color: var(--muted); font-variant-numeric: tabular-nums; }
+.song { min-width: 0; }
+.title { display: block; font-weight: 600; }
+.artist { display: block; color: var(--muted); }
+.unidentified .title { font-weight: 400; color: var(--muted); }
+
+.sources { display: flex; flex-wrap: wrap; gap: .9rem; justify-content: flex-end; }
+.sources button { background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.sources button[aria-expanded="true"] { font-weight: 700; }
+
+/* Submitting a link */
+.sources .fix { color: var(--muted); font-size: .9rem; }
+.sources .fix:hover { color: var(--ink); }
+.fix-form { grid-column: 2 / -1; margin-top: .6rem; display: grid; gap: .5rem; max-width: 560px; }
+.fix-current { margin: 0; color: var(--muted); font-size: .9rem; overflow-wrap: anywhere; }
+.fix-current a { color: var(--ink); }
+.fix-form label { display: grid; gap: .3rem; color: var(--muted); font-size: .9rem; }
+.fix-form input { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--muted); padding: .5rem .6rem; }
+.fix-actions { display: flex; gap: 1.25rem; }
+.fix-actions button { background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.fix-actions button[type="submit"] { font-weight: 600; }
+.fix-actions button:disabled { opacity: .5; cursor: default; }
+.fix-msg { margin: 0; color: var(--muted); font-size: .9rem; }
+.fix-msg:empty { display: none; }
+
+.player { grid-column: 2 / -1; margin-top: .6rem; }
+.player iframe { display: block; width: 100%; max-width: 560px; height: auto; aspect-ratio: 16 / 9; border: 0; }
+
+.empty { color: var(--muted); padding: 1rem 0; }
+
+
+.updated { margin-top: 3rem; font-size: .85rem; color: var(--muted); }
+
+@media (max-width: 720px) {
+  .layout { grid-template-columns: 1fr; gap: 1.5rem; }
+  .cities { position: static; max-height: none; border-bottom: 1px solid var(--line); padding-bottom: 1rem; }
+}
+@media (max-width: 560px) {
+  .track { grid-template-columns: 2rem minmax(0, 1fr); }
+  .sources { grid-column: 2; justify-content: flex-start; }
+  .player, .fix-form { grid-column: 1 / -1; }
+}

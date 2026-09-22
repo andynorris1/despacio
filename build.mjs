@@ -80,7 +80,7 @@ function layout({ title, description, root, body }) {
 <link rel="stylesheet" href="${root}assets/site.css">
 </head>
 <body${canSubmit ? ` data-submit="${esc(config.submitUrl)}"` : ''}>
-<div class="site">
+<div class="site" id="top">
 ${body}
 <p class="updated">Updated ${new Date().toUTCString()}</p>
 </div>
@@ -93,17 +93,20 @@ ${body}
 // Tab "21-Miami" → "Miami". The sheet script already does this; this is a fallback.
 const cityName = tab => (tab || '').replace(/^\s*\d+\s*[-–—]\s*/, '').replace(/\s*\(.*\)\s*$/, '').trim();
 
-// Each gig expands on click to show its dates (MM/DD/YYYY). All start collapsed;
-// the gig being viewed is shown in bold.
-function cityNav(list, current, root) {
-  return `<nav class="cities" aria-label="Cities">
+// Left-hand list. Clicking a gig opens its page, where it's expanded with its dates and
+// the day you're reading highlighted (assets/player.js keeps that in step as you scroll).
+// On the home page every gig starts collapsed.
+function cityNav(list, current, root, isHome) {
+  return `<nav class="cities" aria-label="Gigs">
 <ul>
 ${list.map(a => {
     const href = `${root}sets/${a.slug}/`;
-    const dates = a.dates.length
-      ? a.dates.map(d => `<li><a href="${href}${a.dates.length > 1 ? `#${dayId(d)}` : ''}">${esc(d)}</a></li>`).join('')
-      : `<li><a href="${href}">Setlist</a></li>`;
-    return `<li><details><summary${a === current ? ' aria-current="page"' : ''}>${esc(a.label)}</summary><ul class="dates">${dates}</ul></details></li>`;
+    if (a !== current) return `<li><a class="city" href="${href}">${esc(a.label)}</a></li>`;
+    const multi = a.dates.length > 1;
+    const dates = (a.dates.length ? a.dates : ['Setlist'])
+      .map((d, i) => `<li><a href="${multi ? `#${dayId(d)}` : '#top'}"${!isHome && i === 0 ? ' class="active" aria-current="location"' : ''}>${esc(d)}</a></li>`)
+      .join('');
+    return `<li><details${isHome ? '' : ' open'}><summary aria-current="page">${esc(a.label)}</summary><ul class="dates">${dates}</ul></details></li>`;
   }).join('\n')}
 </ul>
 </nav>`;
@@ -139,12 +142,12 @@ function trackItem(t, i) {
 </li>`;
 }
 
-function page({ list, current, root, main, title, description }) {
+function page({ list, current, root, main, title, description, isHome }) {
   return layout({
     title, description, root,
     body: `<a class="site-title" href="${root || './'}">${esc(config.siteTitle)}</a>
 <div class="layout">
-${cityNav(list, current, root)}
+${cityNav(list, current, root, isHome)}
 <main>
 ${main}
 </main>
@@ -167,10 +170,10 @@ ${day.items.join('\n')}
 </ol>`).join('\n');
 }
 
-function setPage(a, list, root = '../../') {
+function setPage(a, list, root = '../../', isHome = false) {
   const count = a.tracks.length;
   return page({
-    list, current: a, root,
+    list, current: a, root, isHome,
     title: `${a.label} | ${config.siteTitle}`,
     description: `${config.siteTitle} setlist${a.event ? `, ${a.event}` : ''}, ${a.city}. ${count} track${count === 1 ? '' : 's'}.`,
     main: `<h1>${esc(a.label)}</h1>
@@ -180,7 +183,7 @@ ${count ? tracklist(a) : '<p class="empty">No tracks on this setlist yet.</p>'}`
 }
 
 // The home page is the most recent gig's setlist.
-const homePage = list => setPage(list[0], list, '');
+const homePage = list => setPage(list[0], list, '', true);
 
 /* ---------- build ---------- */
 
@@ -208,18 +211,22 @@ async function build() {
         label: [r['city'] || cityName(r['tab']), r['year']].filter(Boolean).join(' '),
         event: r['event'],
         order: parseFloat(r['order']) || 0,
-        tracks: (byGid[r['gid']] || []).sort((a, b) => byId(a['unique id'], b['unique id'])),
+        // Order comes from the sheet script's Position column (Unique ID order, or row
+        // order for older tabs without IDs); Unique ID is the fallback.
+        tracks: (byGid[r['gid']] || []).sort((a, b) =>
+          (parseFloat(a['position']) - parseFloat(b['position'])) || byId(a['unique id'], b['unique id'])),
       };
     })
     .map(a => ({ ...a, dates: [...new Set(a.tracks.map(t => t['date']).filter(Boolean))] }))
-    .filter(a => a.tracks.length) // gigs with no setlist don't appear
+    // Gigs with fewer than minTracks tracks (default 25) don't appear.
+    .filter(a => a.tracks.length >= (Number(config.minTracks) || 1))
     .sort((a, b) => b.order - a.order); // newest first
 
   await rm(OUT, { recursive: true, force: true });
   await mkdir(join(OUT, 'sets'), { recursive: true });
   await cp('assets', join(OUT, 'assets'), { recursive: true });
   await writeFile(join(OUT, '.nojekyll'), '');
-  if (!list.length) throw new Error('No gigs with tracks found in the Tracks tab.');
+  if (!list.length) throw new Error(`No gigs with at least ${config.minTracks || 1} tracks found in the Tracks tab.`);
   await writeFile(join(OUT, 'index.html'), homePage(list));
 
   for (let i = 0; i < list.length; i++) {

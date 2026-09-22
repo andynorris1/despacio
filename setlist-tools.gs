@@ -16,17 +16,20 @@ const CONFIG = {
   // Only tabs named like "21-Miami" are setlists: a number, a dash, then the city.
   // Every other tab in the community sheet is ignored and never appears on the site.
   CITY_TAB: /^\s*(\d+)\s*[-–—]\s*(.+?)\s*$/,
-  SOURCE_HEADERS: {          // accepted header names in the community sheet, lowercase
-    id: ['unique id', 'id', 'uid'],
-    artist: ['artist'],
-    title: ['song title', 'title', 'song', 'track'],
+  // Accepted column names in the community sheet. Case, punctuation and anything in
+  // parentheses are ignored, so "Artist(s)" matches "artist" and "Unique ID #" matches "unique id".
+  // The header row can be anywhere in the first 15 rows of a tab.
+  SOURCE_HEADERS: {
+    id: ['unique id', 'uniqueid', 'unique', 'uid', 'track id', 'id'],
+    artist: ['artist', 'artists', 'artist name'],
+    title: ['title', 'song title', 'track title', 'song', 'track', 'song name', 'track name', 'name'],
     youtube: ['youtube'],                       // links fans have already added
     idStatus: ['identification status'],
     date: ['date'],
   },
   TRACKS: 'Tracks',
   APPEARANCES: 'Appearances',
-  TRACK_HEADERS: ['Appearance', 'gid', 'Unique ID', 'Artist', 'Song Title', 'Status', 'YouTube', 'Date'],
+  TRACK_HEADERS: ['Appearance', 'gid', 'Unique ID', 'Artist', 'Song Title', 'Status', 'YouTube', 'Date', 'Position'],
   APPEARANCE_HEADERS: ['Tab', 'gid', 'City', 'Year', 'Event', 'Order', 'Slug'],
 
   // Which gig each city tab is, by the number at the start of the tab name.
@@ -61,6 +64,7 @@ const T = Object.fromEntries(CONFIG.TRACK_HEADERS.map((h, i) => [h, i]));
 function onOpen() {
   SpreadsheetApp.getUi().createMenu('Setlist tools')
     .addItem('Sync from community sheet now', 'syncFromSource')
+    .addItem('Show last sync result', 'showLastSync')
     .addItem('Find YouTube links now', 'fillYouTubeLinks')
     .addSeparator()
     .addItem('Set up automatic updates', 'setUpTriggers')
@@ -89,9 +93,22 @@ function rows_(sh) {
   return n < 1 ? [] : sh.getRange(2, 1, n, sh.getLastColumn()).getValues();
 }
 
+const normHeader_ = h => String(h).replace(/\(.*?\)/g, ' ').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
 function findCol_(headers, aliases) {
-  const lower = headers.map(h => String(h).trim().toLowerCase());
-  for (const a of aliases) { const i = lower.indexOf(a); if (i >= 0) return i; }
+  const norm = headers.map(normHeader_);
+  for (const a of aliases) { const i = norm.indexOf(a); if (i >= 0) return i; }
+  return -1;
+}
+
+// Finds the first row (within the top 15) that has Unique ID, Artist and Title columns.
+function findHeaderRow_(values) {
+  for (let r = 0; r < Math.min(values.length, 15); r++) {
+    const h = values[r];
+    if (findCol_(h, CONFIG.SOURCE_HEADERS.id) >= 0 &&
+        findCol_(h, CONFIG.SOURCE_HEADERS.artist) >= 0 &&
+        findCol_(h, CONFIG.SOURCE_HEADERS.title) >= 0) return r;
+  }
   return -1;
 }
 
@@ -130,30 +147,44 @@ function syncFromSource() {
     src.getSheets().forEach(s => {
       if (!CONFIG.CITY_TAB.test(s.getName())) return; // not a city tab
       const values = s.getDataRange().getDisplayValues(); // exactly as fans see it
-      if (values.length < 2) return;
-      const h = values[0];
+      const hr = findHeaderRow_(values);
+      if (hr < 0) { skipped.push(s.getName()); return; } // no Unique ID / Artist / Title columns
+      const h = values[hr];
+      const body = values.slice(hr + 1);
       const cId = findCol_(h, CONFIG.SOURCE_HEADERS.id);
       const cA = findCol_(h, CONFIG.SOURCE_HEADERS.artist);
       const cT = findCol_(h, CONFIG.SOURCE_HEADERS.title);
-      if (cId < 0 || cA < 0 || cT < 0) { skipped.push(s.getName()); return; } // missing columns
       const cYT = findCol_(h, CONFIG.SOURCE_HEADERS.youtube);
       const cSt = findCol_(h, CONFIG.SOURCE_HEADERS.idStatus);
       const cDate = findCol_(h, CONFIG.SOURCE_HEADERS.date);
       tabs.push(s);
-      if (cDate >= 0) years[s.getSheetId()] = commonYear_(values.slice(1).map(r => r[cDate]));
+      if (cDate >= 0) years[s.getSheetId()] = commonYear_(body.map(r => r[cDate]));
       let lastDate = ''; // rows with a blank Date take the date of the row above
 
       const gid = s.getSheetId();
-      values.slice(1).forEach(r => {
-        const id = String(r[cId]).trim();
-        if (!id) return;
+      // Tabs with Unique IDs are ordered by them, and rows without one are left out
+      // (tracks fans couldn't place). Older tabs with no Unique IDs at all use the
+      // order of their rows instead.
+      const hasIds = body.some(r => String(r[cId]).trim());
+      const seen = {};
+      const tabRows = [];
+      body.forEach(r => {
         const artist = String(r[cA]).trim();
         const title = String(r[cT]).trim();
         const date = cDate >= 0 ? formatDate_(r[cDate]) : '';
         if (date) lastDate = date;
-        // Skip notes rows like "GAP IN RECORDING", which have an ID but no track.
+        // Skip notes rows like "GAP IN RECORDING", and blank rows.
         if (!artist && !title) return;
         if (cSt >= 0 && /^administrative$/i.test(String(r[cSt]).trim())) return;
+        let id = String(r[cId]).trim();
+        if (!id) {
+          if (hasIds) return;
+          // No Unique IDs in this tab: make one from the song, so links stay with
+          // the right track even if fans insert or move rows.
+          const base = slugify_(`${artist} ${title}`) || 'track';
+          seen[base] = (seen[base] || 0) + 1;
+          id = `auto-${base}-${seen[base]}`;
+        }
         const p = prev[`${gid}|${id}`];
         const same = p && String(p[T.Artist]) === artist && String(p[T['Song Title']]) === title;
         // Which link to use: one a visitor submitted on the site, then one fans added
@@ -177,14 +208,16 @@ function syncFromSource() {
         else if (url) row[T.Status] = CONFIG.STATUS.FOUND;
         else if (isUnknown_(artist) && isUnknown_(title)) row[T.Status] = CONFIG.STATUS.UNKNOWN;
         else if (same && p[T.Status] === CONFIG.STATUS.NO_MATCH) row[T.Status] = CONFIG.STATUS.NO_MATCH;
-        out.push(row);
+        tabRows.push(row);
       });
+      if (hasIds) tabRows.sort((a, b) => byId_(a[T['Unique ID']], b[T['Unique ID']]));
+      tabRows.forEach((row, i) => { row[T.Position] = i + 1; out.push(row); });
     });
 
     shareLinks_(out);
     tabs.sort((a, b) => tabNumber_(a) - tabNumber_(b));
     const tabOrder = Object.fromEntries(tabs.map((s, i) => [s.getSheetId(), i]));
-    out.sort((a, b) => (tabOrder[a[T.gid]] - tabOrder[b[T.gid]]) || byId_(a[T['Unique ID']], b[T['Unique ID']]));
+    out.sort((a, b) => (tabOrder[a[T.gid]] - tabOrder[b[T.gid]]) || (a[T.Position] - b[T.Position]));
 
     tracks.clear(); // also drops any columns left over from older versions
     const H = CONFIG.TRACK_HEADERS;
@@ -196,6 +229,8 @@ function syncFromSource() {
     }
 
     rebuildAppearances_(tabs, years);
+    PropertiesService.getScriptProperties().setProperty('lastSync',
+      JSON.stringify({ when: new Date().toISOString(), tracks: out.length, cities: tabs.length, skipped }));
     notify_(`Synced ${out.length} tracks from ${tabs.length} cities.` +
       (skipped.length ? ` Skipped (no Unique ID / Artist / Title columns): ${skipped.join(', ')}` : ''));
   });
@@ -260,11 +295,26 @@ function slugify_(name) {
     .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
 
+function showLastSync() {
+  const raw = PropertiesService.getScriptProperties().getProperty('lastSync');
+  const r = raw ? JSON.parse(raw) : null;
+  SpreadsheetApp.getUi().alert(!r ? 'No sync has run yet.' :
+    `Last sync: ${new Date(r.when).toLocaleString()}\n${r.tracks} tracks from ${r.cities} cities.` +
+    (r.skipped.length ? `\n\nSkipped (couldn't find Unique ID, Artist and Title columns):\n${r.skipped.join('\n')}` : '\n\nNo tabs skipped.'));
+}
+
 /* ---------- Sharing links between gigs ---------- */
 
-// Same artist + title (ignoring case and extra spaces) = same song.
+// Edits that only exist in Despacio sets aren't on YouTube, so search for the original:
+// "Vaudou (2manydjs Edit)" → "Vaudou", "Need You Tonight (Despacio Edit)" → "Need You Tonight".
+// Only the search uses this; the site shows the title as the community wrote it.
+const EDIT_TAG = /\s*[(\[][^)\]]*\b(?:2\s*many\s*dj'?s|despacio)\s+(?:re-?)?edit\b[^)\]]*[)\]]|\s*[-–—]?\s*\b(?:2\s*many\s*dj'?s|despacio)\s+(?:re-?)?edit\b/gi;
+const searchTitle_ = title => String(title).replace(EDIT_TAG, '').trim() || String(title).trim();
+
+// Same artist + title (ignoring case, extra spaces, and a 2manydjs/Despacio Edit tag) = same song,
+// so an edit shares its link with the original.
 const songKey_ = (artist, title) =>
-  [artist, title].map(v => String(v).trim().toLowerCase().replace(/\s+/g, ' ')).join('|');
+  [artist, searchTitle_(title)].map(v => String(v).trim().toLowerCase().replace(/\s+/g, ' ')).join('|');
 
 // Tracks without a link borrow one from the same song at another gig, so each song
 // is only ever searched once. Priority: visitor-submitted, then community, then found.
@@ -292,7 +342,11 @@ function fillYouTubeLinks() {
     const data = rows_(tracks);
     let searched = 0, found = 0, reused = 0;
     const known = {};
-    data.forEach(r => { const u = String(r[T.YouTube]).trim(); if (u) known[songKey_(r[T.Artist], r[T['Song Title']])] ||= u; });
+    data.forEach(r => {
+      const u = String(r[T.YouTube]).trim();
+      const key = songKey_(r[T.Artist], r[T['Song Title']]);
+      if (u && !known[key]) known[key] = u;
+    });
 
     for (let i = 0; i < data.length && searched < CONFIG.YT_SEARCHES_PER_RUN; i++) {
       const r = data[i];
@@ -310,7 +364,7 @@ function fillYouTubeLinks() {
 
       let url;
       try {
-        url = searchYouTube_(isUnknown_(artist) ? '' : artist, title);
+        url = searchYouTube_(isUnknown_(artist) ? '' : artist, searchTitle_(title));
       } catch (e) {
         if (interactive_()) SpreadsheetApp.getUi().alert(`YouTube search stopped: ${e.message}\n\nIf this mentions quota, the daily limit is used up. It resets at midnight Pacific time.`);
         break;

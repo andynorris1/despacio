@@ -1,4 +1,4 @@
-# DESPACIO
+# Despacio Tracklists
 
 A setlist site for every Despacio gig, built from the community's
 [Despacio Song IDs spreadsheet (TSOT)](https://docs.google.com/spreadsheets/d/13JSLgoeB9lnosv_R2m4ZqYSlqM5A9y8hb4b2v_KaW7U/edit),
@@ -27,10 +27,36 @@ Do these in order. Steps 1–4 happen in Google; steps 5–7 in this repo.
 ### 1. Create the links sheet
 
 1. Create a new, empty Google Sheet (for example, "DESPACIO links").
-2. Go to **Extensions → Apps Script**. Delete the sample code and paste in
-   `apps-script/setlist-tools.gs`. Save.
-3. In the Apps Script editor, click **Services (+)**, choose **YouTube Data API v3**, and click **Add**.
-4. Reload the Google Sheet. A **Setlist tools** menu appears.
+2. Go to **Extensions → Apps Script**. Select everything in `Code.gs` (including
+   `function myFunction()`) and delete it.
+3. In this repo on GitHub, open `apps-script/setlist-tools.gs` and click **Copy raw file**
+   (the two-squares icon above the code). Paste the whole file into `Code.gs` and save.
+   It should start with `/**` followed by `* Setlist tools — runs in YOUR OWN Google Sheet`.
+4. In the Apps Script editor, click the **+** next to **Services**, choose **YouTube Data API v3**,
+   and click **Add**. If the dialog won't open (common when signed into several Google
+   accounts), use the manifest instead: **Project Settings (gear) → Show "appsscript.json"
+   manifest file in editor**. Open `appsscript.json` (not `Code.gs`), replace everything in it
+   with the following, and save:
+   ```json
+   {
+     "timeZone": "America/Los_Angeles",
+     "dependencies": {
+       "enabledAdvancedServices": [
+         {
+           "userSymbol": "YouTube",
+           "serviceId": "youtube",
+           "version": "v3"
+         }
+       ]
+     },
+     "exceptionLogging": "STACKDRIVER",
+     "runtimeVersion": "V8"
+   }
+   ```
+5. In the function dropdown next to **Run**, choose **onOpen** and click **Run**. Approve the
+   permissions (**Advanced → Go to … (unsafe) → Allow**; this warning is normal for your own
+   script). Switch to the Google Sheet's tab: a **Setlist tools** menu is now in the menu bar.
+   From now on it appears automatically whenever the sheet opens.
 
 `SOURCE_ID` at the top of the script already points at the community sheet.
 
@@ -73,7 +99,8 @@ To get links sooner, choose **Setlist tools → Find YouTube links now**
   "appearancesGid": "from step 3",
   "tracksGid": "from step 3",
   "submitUrl": "from step 4",
-  "siteTitle": "DESPACIO"
+  "siteTitle": "Despacio Tracklists",
+  "minTracks": 25
 }
 ```
 
@@ -108,6 +135,8 @@ Most things happen on their own:
 ## Rules the site follows
 
 - Only tabs named `number-city` (like `21-Miami`) become pages. All other tabs are ignored.
+- Gigs with fewer than 25 tracks don't appear (`minTracks` in `config.json`).
+- Tracks titled as a 2manydjs Edit or Despacio Edit are searched as the original song.
 - Gigs appear newest first. Each city expands to show its dates (MM/DD/YYYY).
 - Tracks are ordered by Unique ID. Rows without a Unique ID, and notes rows, are left out.
 - Tracks marked Unknown for both artist and title show as "Unknown - Unknown" and are never searched.
