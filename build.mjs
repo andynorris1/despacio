@@ -111,6 +111,7 @@ ${list.map(a => {
       .join('');
     return `<li><details${isHome ? '' : ' open'}><summary aria-current="page">${esc(a.label)}</summary><ul class="dates">${dates}</ul></details></li>`;
   }).join('\n')}
+<li><a class="city all-songs-link" href="${root}songs/"${current === 'songs' ? ' aria-current="page"' : ''}>All songs</a></li>
 </ul>
 </nav>`;
 }
@@ -163,11 +164,14 @@ ${main}
 // Player bar above each setlist: Previous, Play/Pause, Next, what's playing, and an
 // Autoplay switch (off by default). assets/player.js makes it work.
 const icon = d => `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="${d}"/></svg>`;
+const shuffleButton = `<button type="button" class="btn shuffle" data-action="shuffle" aria-pressed="false" aria-label="Shuffle">${icon('M17 3h4v4h-2V6.4l-4.3 4.3-1.4-1.4L17.6 5H17V3zm4 10v4h-4v-2h.6l-4.3-4.3 1.4-1.4L19 13.6V13h2zM3 6h4.2l2.6 2.6-1.4 1.4L6.6 8H3V6zm0 10h3.6l8.7-8.7V6h2v4h-4V8.6L7.4 18H3v-2z')}</button>`;
+
 const playerBar = `<div class="controls" role="group" aria-label="Player">
   <div class="transport">
     <button type="button" class="btn" data-action="prev" aria-label="Previous track">${icon('M6 5h2v14H6zM20 5v14L9 12z')}</button>
     <button type="button" class="btn toggle" data-action="toggle" data-state="paused" aria-label="Play">${icon('M8 5v14l11-7z').replace('<svg', '<svg class="i-play"')}${icon('M7 5h4v14H7zM13 5h4v14h-4z').replace('<svg', '<svg class="i-pause"')}</button>
     <button type="button" class="btn" data-action="next" aria-label="Next track">${icon('M16 5h2v14h-2zM4 5v14l11-7z')}</button>
+    <!--shuffle-->
   </div>
   <p class="now" aria-live="polite"></p>
   <label class="autoplay"><input type="checkbox" role="switch"> Autoplay</label>
@@ -195,12 +199,82 @@ function setPage(a, list, root = '../../', isHome = false) {
     description: `${a.year ? `${config.siteTitle} setlist, ${a.city}` : `${config.siteTitle}: ${a.city}`}${a.event ? `, ${a.event}` : ''}. ${count} track${count === 1 ? '' : 's'}.`,
     main: `<h1>${esc(a.label)}</h1>
 ${a.event ? `<p class="event">${esc(a.event)}</p>` : ''}
-${count ? playerBar + tracklist(a) : '<p class="empty">No tracks on this setlist yet.</p>'}`,
+${count ? playerBar.replace('<!--shuffle-->', '') + tracklist(a) : '<p class="empty">No tracks on this setlist yet.</p>'}`,
   });
 }
 
 // The home page is the most recent gig's setlist.
 const homePage = list => setPage(list[0], list, '', true);
+
+// Groups the same song across residencies, ignoring spelling differences the way the
+// sheet script does, so "Hall & Oates" and "Hall and Oates" count as one song.
+const songKey = t => [t['artist'], t['song title']]
+  .map(v => String(v || '').toLowerCase()
+    .replace(/[([][^)\]]*\b(?:2\s*many\s*dj'?s|despacio)\s+(?:re-?)?edit\b[^)\]]*[)\]]/g, ' ')
+    .replace(/[([][^)\]]*\bunknown\s+(?:version|edit)\b[^)\]]*[)\]]/g, ' ')
+    .replace(/\bfeat(uring)?\.?\b[^)\]]*/g, ' ')
+    .replace(/\band\b/g, '&')
+    .replace(/\bthe\b/g, ' ')
+    .replace(/[^a-z0-9&]+/g, ''))
+  .join('|');
+
+// Every identified song, ranked by how many residencies played it. Songs with no link
+// are listed too; Shuffle only picks from the ones that can be played.
+function allSongsPage(list) {
+  const songs = new Map();
+  list.filter(a => a.year).forEach(a => a.tracks.forEach(t => {
+    const title = t['song title'];
+    if (isUnknown(t['artist']) && isUnknown(title)) return;
+    if (!title) return;
+    const k = songKey(t);
+    if (!k) return;
+    const song = songs.get(k) || { track: t, gigs: new Set(), yt: '' };
+    song.gigs.add(a.gid);
+    if (!song.yt) song.yt = ytId(t['youtube']);
+    if (!song.track['youtube'] && t['youtube']) song.track = t; // prefer a row with a link
+    songs.set(k, song);
+  }));
+
+  const ranked = [...songs.values()].sort((a, b) =>
+    (b.gigs.size - a.gigs.size) ||
+    String(a.track['artist']).localeCompare(String(b.track['artist'])) ||
+    String(a.track['song title']).localeCompare(String(b.track['song title'])));
+
+  let rank = 0, lastCount = null;
+  const items = ranked.map((song, i) => {
+    if (song.gigs.size !== lastCount) { rank = i + 1; lastCount = song.gigs.size; }
+    const t = song.track;
+    const n = song.gigs.size;
+    const play = song.yt
+      ? `<button type="button" class="play" data-yt="${song.yt}" aria-expanded="false" aria-label="Play ${esc(t['song title'])} on YouTube">Play</button>`
+      : '';
+    const fix = canSubmit
+      ? `<button type="button" class="fix">${song.yt ? 'Wrong link?' : 'Add link'}</button>`
+      : '';
+    return `<li class="track" id="s-${esc(slugify(songKey(t)) || String(i + 1))}" data-gid="${esc(t['gid'])}" data-id="${esc(t['unique id'])}">
+  <span class="pos">${rank}</span>
+  <span class="song">
+    <span class="title">${esc(t['song title'])}</span>
+    ${t['artist'] ? `<span class="artist">${esc(t['artist'])}</span>` : ''}
+    <span class="count">${n} residenc${n === 1 ? 'y' : 'ies'}</span>
+  </span>
+  <span class="sources">${play}${fix}</span>
+  <div class="player" hidden></div>
+</li>`;
+  }).join('\n');
+
+  return page({
+    list, current: 'songs', root: '../',
+    title: `All songs | ${config.siteTitle}`,
+    description: `Every song identified at a Despacio residency, ranked by how many residencies played it.`,
+    main: `<h1>All songs</h1>
+<p class="event">${ranked.length} songs, ranked by how many residencies played them.</p>
+${playerBar.replace('<!--shuffle-->', shuffleButton)}
+<ol class="tracks">
+${items}
+</ol>`,
+  });
+}
 
 // About page. Edit the text here; it rebuilds with the site.
 function aboutPage(list) {
@@ -278,6 +352,7 @@ async function build() {
       return {
         gid: r['gid'], slug,
         city: r['city'] || cityName(r['tab']),
+        year: r['year'],
         label: [r['city'] || cityName(r['tab']), r['year']].filter(Boolean).join(' '),
         event: r['event'],
         order: parseFloat(r['order']) || 0,
@@ -301,6 +376,8 @@ async function build() {
 
   await mkdir(join(OUT, 'about'), { recursive: true });
   await writeFile(join(OUT, 'about', 'index.html'), aboutPage(list));
+  await mkdir(join(OUT, 'songs'), { recursive: true });
+  await writeFile(join(OUT, 'songs', 'index.html'), allSongsPage(list));
 
   for (let i = 0; i < list.length; i++) {
     const dir = join(OUT, 'sets', list[i].slug);
