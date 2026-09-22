@@ -127,7 +127,9 @@ Most things happen on their own:
   (hourly sync, then hourly build).
 - **New gigs** appear automatically when the community adds a tab named like `22-City`.
   The year comes from the tab's Date column. To add the event name and dates under the
-  heading, add the gig to `GIGS` at the top of the Apps Script.
+  heading, add the gig to `GIGS` at the top of the Apps Script (by tab number). For an
+  upcoming gig whose tab doesn't exist yet, add it to `GIGS_BY_DATE` instead: it's matched
+  by the dates in the new tab's Date column, whatever the tab is called.
 - **Visitors fix wrong links** with **Wrong link? → Replace this link** on the site.
   Every change is logged in the **Submissions** tab of the links sheet. To undo one,
   paste the old link back into the Tracks tab.
