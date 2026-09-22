@@ -77,6 +77,7 @@ html { scroll-behavior: smooth; }
 .controls .toggle svg { width: 1.35rem; height: 1.35rem; }
 .controls .toggle[data-state="paused"] .i-pause, .controls .toggle[data-state="playing"] .i-play { display: none; }
 .controls .btn:disabled { opacity: .35; cursor: default; }
+.controls .shuffle[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
 .controls .btn:disabled:hover { border-color: var(--muted); }
 .now { flex: 1 1 12rem; margin: 0; color: var(--muted); font-size: .95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .now:empty::before { content: "Nothing playing"; }
@@ -105,6 +106,7 @@ html { scroll-behavior: smooth; }
 .song { min-width: 0; }
 .title { display: block; font-weight: 600; }
 .artist { display: block; color: var(--muted); }
+.count { display: block; color: var(--muted); font-size: .85rem; font-variant-numeric: tabular-nums; }
 .unidentified .title { font-weight: 400; color: var(--muted); }
 
 .sources { display: flex; flex-wrap: wrap; gap: .9rem; justify-content: flex-end; }

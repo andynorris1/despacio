@@ -9,6 +9,8 @@
   const toggleBtn = bar && bar.querySelector('[data-action="toggle"]');
   const nowEl = bar && bar.querySelector('.now');
   const autoplayBox = bar && bar.querySelector('.autoplay input');
+  const shuffleBtn = bar && bar.querySelector('[data-action="shuffle"]'); // All songs page only
+  let shuffle = false;
 
   let api = null;       // YouTube IFrame API, loaded on first play
   let player = null;    // the YT.Player for the current track
@@ -53,8 +55,8 @@
     toggleBtn.setAttribute('aria-label', playing ? 'Pause' : 'Play');
     const list = playlist();
     const i = current ? list.indexOf(current) : -1;
-    bar.querySelector('[data-action="prev"]').disabled = i <= 0;
-    bar.querySelector('[data-action="next"]').disabled = i >= list.length - 1 && i !== -1;
+    bar.querySelector('[data-action="prev"]').disabled = !shuffle && i <= 0;
+    bar.querySelector('[data-action="next"]').disabled = !shuffle && i >= list.length - 1 && i !== -1;
     if (current) {
       const pos = current.querySelector('.pos').textContent;
       const title = current.querySelector('.title').textContent;
@@ -131,6 +133,12 @@
     const list = playlist();
     if (!list.length) return;
     const i = current ? list.indexOf(current) : -1;
+    if (shuffle) { // any other track with a link
+      const pool = list.filter(t => t !== current);
+      if (!pool.length) return;
+      play(pool[Math.floor(Math.random() * pool.length)], { follow: true });
+      return;
+    }
     const next = list[i + dir];
     if (next) play(next, { follow: true });
     else if (dir > 0) stop(); // end of the set
@@ -139,7 +147,8 @@
   function togglePlay() {
     if (!current) {
       const list = playlist();
-      if (list.length) play(list[0], { follow: true });
+      if (!list.length) return;
+      play(shuffle ? list[Math.floor(Math.random() * list.length)] : list[0], { follow: true });
       return;
     }
     if (!player || !ready) { pendingToggle = !pendingToggle; return; } // still loading
@@ -175,6 +184,12 @@
   bar && bar.addEventListener('click', e => {
     const b = e.target.closest('button[data-action]');
     if (!b) return;
+    if (b.dataset.action === 'shuffle') {
+      shuffle = !shuffle;
+      b.setAttribute('aria-pressed', String(shuffle));
+      updateUi();
+      return;
+    }
     if (b.dataset.action === 'toggle') togglePlay();
     if (b.dataset.action === 'prev') step(-1);
     if (b.dataset.action === 'next') step(1);
