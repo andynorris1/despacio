@@ -138,7 +138,7 @@ Most things happen on their own:
 
 - Only tabs named `number-city` (like `21-Miami`) become pages. All other tabs are ignored.
 - Gigs with fewer than 25 tracks don't appear (`minTracks` in `config.json`).
-- Tracks titled as a 2manydjs Edit or Despacio Edit are searched as the original song.
+- Tracks titled as a 2manydjs Edit, Despacio Edit, Unknown Version or Unknown Edit are searched as the original song.
 - Gigs appear newest first. Each city expands to show its dates (MM/DD/YYYY).
 - Tracks are ordered by Unique ID. Rows without a Unique ID, and notes rows, are left out.
 - Tracks marked Unknown for both artist and title show as "Unknown - Unknown" and are never searched.
