@@ -143,6 +143,8 @@ Most things happen on their own:
 - Tracks are ordered by Unique ID. Rows without a Unique ID, and notes rows, are left out.
 - Tracks marked Unknown for both artist and title show as "Unknown - Unknown" and are never searched.
 - The nightly search works newest gig first, down each setlist in order.
+- Each setlist has a player bar (Previous, Play/Pause, Next). With **Autoplay** on, the next
+  track with a link starts when a video ends; it's off by default and remembered per browser.
 - Once a track has a YouTube link, it is never searched again.
 - A song played at several gigs shares one link.
 - Link priority: a visitor's submitted link, then a link fans added in the community sheet,
