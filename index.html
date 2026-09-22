@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Setlist archive</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #ECEAF4;
+    --surface: #F7F6FB;
+    --ink: #1B1846;
+    --muted: #6A6690;
+    --line: #D3D0E3;
+    --band: #D92A68;
+    --band-ink: #FFFFFF;
+    --focus: #2F5BEA;
+    --display: "Unbounded", "Arial Black", system-ui, sans-serif;
+    --body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #15132E; --surface: #1E1B3E; --ink: #EDEBFA; --muted: #A19DC4;
+      --line: #35315F; --band: #EE4F88; --focus: #8FA8FF;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--paper); color: var(--ink); font: 400 1rem/1.5 var(--body); }
+  button, select { font: inherit; color: inherit; }
+  :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+  .site { max-width: 1120px; margin: 0 auto; padding: 1.5rem 1.25rem 4rem; }
+  .site-title { font: 500 .95rem/1.2 var(--display); color: var(--muted); margin: 0 0 1.25rem; }
+
+  /* The wristband: the one loud element on the page */
+  .band {
+    position: relative;
+    background:
+      repeating-linear-gradient(90deg, transparent 0 22px, rgba(255,255,255,.07) 22px 24px),
+      var(--band);
+    color: var(--band-ink);
+    padding: 1.4rem 4rem 1.4rem 3.25rem;
+    border-radius: 8px 0 0 8px;
+    clip-path: polygon(0 0, 100% 0, calc(100% - 1.75rem) 50%, 100% 100%, 0 100%);
+  }
+  .band::before { /* snap hole */
+    content: ""; position: absolute; left: 1.1rem; top: 50%;
+    width: .9rem; height: .9rem; margin-top: -.45rem; border-radius: 50%;
+    background: var(--paper);
+  }
+  .band h1 {
+    font: 700 clamp(1.6rem, 5vw, 3.25rem)/1.05 var(--display);
+    letter-spacing: -.01em; margin: 0; overflow-wrap: anywhere;
+  }
+  .band-meta { display: flex; flex-wrap: wrap; gap: .25rem 1.25rem; margin: .6rem 0 0; font-weight: 500; opacity: .92; }
+  .band-meta:empty { display: none; }
+
+  .layout { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 2.5rem; margin-top: 2rem; }
+
+  .appearances { list-style: none; margin: 0; padding: 0; }
+  .appearances button {
+    display: block; width: 100%; text-align: left; background: none; border: 0;
+    border-left: 4px solid transparent; padding: .55rem .75rem; cursor: pointer; border-radius: 0 4px 4px 0;
+  }
+  .appearances button:hover { background: var(--surface); }
+  .appearances button[aria-current="true"] { border-left-color: var(--band); background: var(--surface); font-weight: 600; }
+  .appearances small { display: block; color: var(--muted); font-weight: 400; }
+  .picker { display: none; }
+
+  .tracks { list-style: none; margin: 0; padding: 0; }
+  .track {
+    display: grid; grid-template-columns: 2.5rem minmax(0, 1fr) auto; gap: .25rem 1rem;
+    align-items: center; padding: .8rem 0; border-bottom: 1px solid var(--line);
+  }
+  .track:target { background: var(--surface); }
+  .pos { color: var(--muted); font-variant-numeric: tabular-nums; font-weight: 500; }
+  .song { min-width: 0; }
+  .title { display: block; font-weight: 600; }
+  .artist { display: block; color: var(--muted); }
+  .unidentified .title { font-style: italic; font-weight: 500; color: var(--muted); }
+  .flag { display: block; font-size: .8rem; color: var(--muted); }
+
+  .sources { display: flex; flex-wrap: wrap; gap: .4rem; justify-content: flex-end; }
+  .sources button {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 999px;
+    padding: .3rem .8rem; font-size: .875rem; font-weight: 500; cursor: pointer;
+  }
+  .sources button:hover { border-color: var(--ink); }
+  .sources button[aria-expanded="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  .none { font-size: .875rem; color: var(--muted); }
+
+  .player { grid-column: 2 / -1; margin-top: .5rem; }
+  .player iframe { display: block; width: 100%; border: 0; border-radius: 6px; }
+  .player .yt { aspect-ratio: 16 / 9; max-width: 560px; }
+
+  .status { color: var(--muted); padding: 1rem 0; }
+
+  @media (max-width: 760px) {
+    .layout { grid-template-columns: 1fr; gap: 1.25rem; }
+    .appearances { display: none; }
+    .picker { display: block; width: 100%; padding: .6rem; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+    .track { grid-template-columns: 2rem minmax(0, 1fr); }
+    .sources { grid-column: 2; justify-content: flex-start; }
+    .player { grid-column: 1 / -1; }
+    .band { padding: 1.1rem 3rem 1.1rem 2.75rem; }
+  }
+</style>
+</head>
+<body>
+<div class="site">
+  <p class="site-title" id="siteTitle"></p>
+  <header class="band"><h1 id="setName">Loading setlists</h1><p class="band-meta" id="setMeta"></p></header>
+
+  <div class="layout">
+    <nav aria-label="Appearances">
+      <label class="picker-label" for="picker" hidden>Appearance</label>
+      <select class="picker" id="picker" aria-label="Choose an appearance"></select>
+      <ul class="appearances" id="appearances"></ul>
+    </nav>
+    <main>
+      <p class="status" id="status" role="status"></p>
+      <ol class="tracks" id="tracks"></ol>
+    </main>
+  </div>
+</div>
+
+<script>
+/* ======= CONFIG: fill these in ======= */
+const PUB_ID = 'PASTE_PUBLISHED_ID_HERE';   // the long ID from your "Publish to web" link (after /d/e/)
+const INDEX_GID = '0';                        // gid of the Index tab (from the sheet URL when it's open)
+const SITE_TITLE = 'Setlist archive';
+/* ==================================== */
+
+const HEADERS = {
+  id: ['unique id', 'id', 'uid'],
+  artist: ['artist'],
+  title: ['song title', 'title', 'song', 'track'],
+};
+const UNKNOWN = /^(id|unknown|unreleased|\?+)$/i;
+
+const $ = id => document.getElementById(id);
+const csvUrl = gid => `https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?gid=${gid}&single=true&output=csv`;
+const cache = {};
+let appearances = [];
+
+function parseCSV(t) {
+  const rows = []; let row = [], f = '', q = false;
+  for (let i = 0; i < t.length; i++) {
+    const c = t[i];
+    if (q) {
+      if (c === '"') { if (t[i + 1] === '"') { f += '"'; i++; } else q = false; }
+      else f += c;
+    } else if (c === '"') q = true;
+    else if (c === ',') { row.push(f); f = ''; }
+    else if (c === '\n') { row.push(f); rows.push(row); row = []; f = ''; }
+    else if (c !== '\r') f += c;
+  }
+  if (f || row.length) { row.push(f); rows.push(row); }
+  return rows;
+}
+
+function toObjects(rows) {
+  const keys = (rows[0] || []).map(h => h.trim().toLowerCase());
+  return rows.slice(1)
+    .filter(r => r.some(v => v.trim()))
+    .map(r => Object.fromEntries(keys.map((k, i) => [k, (r[i] || '').trim()])));
+}
+
+const pick = (obj, aliases) => { for (const a of aliases) if (obj[a]) return obj[a]; return ''; };
+
+async function loadCSV(gid) {
+  const res = await fetch(csvUrl(gid));
+  if (!res.ok) throw new Error(`The sheet returned ${res.status}.`);
+  return toObjects(parseCSV(await res.text()));
+}
+
+function ytId(url) {
+  const m = url.match(/(?:v=|youtu\.be\/|shorts\/|embed\/|live\/)([\w-]{11})/);
+  return m ? m[1] : '';
+}
+
+function sourcesFor(t) {
+  const out = [];
+  const yt = ytId(t['youtube'] || '');
+  if (yt) out.push({ label: 'YouTube', html: `<iframe class="yt" src="https://www.youtube-nocookie.com/embed/${yt}?autoplay=1" title="YouTube player" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>` });
+  const bc = (t['bandcamp id'] || '').match(/^\d+$/) ? t['bandcamp id'] : '';
+  if (bc) out.push({ label: 'Bandcamp', html: `<iframe style="height:120px" src="https://bandcamp.com/EmbeddedPlayer/track=${bc}/size=large/bgcol=ffffff/linkcol=d92a68/tracklist=false/artwork=small/transparent=true/" title="Bandcamp player" seamless></iframe>` });
+  const sc = t['soundcloud'] || '';
+  if (/soundcloud\.com\//.test(sc)) out.push({ label: 'SoundCloud', html: `<iframe style="height:166px" allow="autoplay" src="https://w.soundcloud.com/player/?url=${encodeURIComponent(sc)}&auto_play=true&visual=false&show_comments=false&color=%23d92a68" title="SoundCloud player"></iframe>` });
+  return out;
+}
+
+const esc = s => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+function closeAllPlayers() {
+  document.querySelectorAll('.player').forEach(p => { p.innerHTML = ''; p.hidden = true; });
+  document.querySelectorAll('.sources button').forEach(b => b.setAttribute('aria-expanded', 'false'));
+}
+
+function renderTracks(gid, rows) {
+  const list = $('tracks');
+  list.innerHTML = '';
+  const hasVerified = rows.length && 'links verified' in rows[0];
+
+  rows.forEach((t, i) => {
+    const title = pick(t, HEADERS.title);
+    const artist = pick(t, HEADERS.artist);
+    const id = pick(t, HEADERS.id) || String(i + 1);
+    const unknown = !title || UNKNOWN.test(title);
+    const sources = sourcesFor(t);
+    const unverified = hasVerified && sources.length && t['links verified'].toUpperCase() !== 'TRUE';
+
+    const li = document.createElement('li');
+    li.className = 'track' + (unknown ? ' unidentified' : '');
+    li.id = `t-${id}`;
+    li.innerHTML = `
+      <span class="pos">${String(i + 1).padStart(2, '0')}</span>
+      <span class="song">
+        <span class="title">${unknown ? 'Unidentified track' : esc(title)}</span>
+        ${artist ? `<span class="artist">${esc(artist)}</span>` : ''}
+        ${unverified ? '<span class="flag">Link not yet verified</span>' : ''}
+      </span>
+      <span class="sources">${sources.length
+        ? sources.map((s, j) => `<button type="button" data-j="${j}" aria-expanded="false">${s.label}</button>`).join('')
+        : '<span class="none">No link yet</span>'}</span>
+      <div class="player" hidden></div>`;
+
+    li.querySelectorAll('.sources button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const open = btn.getAttribute('aria-expanded') === 'true';
+        closeAllPlayers(); // one player at a time, so tracks never overlap
+        if (open) return;
+        const p = li.querySelector('.player');
+        p.innerHTML = sources[+btn.dataset.j].html;
+        p.hidden = false;
+        btn.setAttribute('aria-expanded', 'true');
+        history.replaceState(null, '', `#g=${gid}&t=${encodeURIComponent(id)}`);
+      });
+    });
+    list.appendChild(li);
+  });
+}
+
+async function showAppearance(gid, trackId) {
+  const a = appearances.find(x => x.gid === gid) || appearances[0];
+  if (!a) return;
+  $('setName').textContent = a.festival;
+  $('setMeta').innerHTML = [a.date, a.location].filter(Boolean).map(v => `<span>${esc(v)}</span>`).join('');
+  document.title = `${a.festival} | ${SITE_TITLE}`;
+  document.querySelectorAll('.appearances button').forEach(b => b.setAttribute('aria-current', String(b.dataset.gid === a.gid)));
+  $('picker').value = a.gid;
+  if (!trackId) history.replaceState(null, '', `#g=${a.gid}`);
+
+  $('tracks').innerHTML = '';
+  $('status').textContent = 'Loading setlist…';
+  try {
+    cache[a.gid] = cache[a.gid] || await loadCSV(a.gid);
+    const rows = cache[a.gid];
+    $('status').textContent = rows.length ? '' : 'No tracks on this setlist yet.';
+    renderTracks(a.gid, rows);
+    if (trackId) document.getElementById(`t-${trackId}`)?.scrollIntoView({ block: 'center' });
+  } catch (e) {
+    $('status').textContent = `Couldn't load this setlist. ${e.message} Check that the sheet is published to the web.`;
+  }
+}
+
+function readHash() {
+  const p = new URLSearchParams(location.hash.slice(1));
+  return { gid: p.get('g'), track: p.get('t') };
+}
+
+async function init() {
+  $('siteTitle').textContent = SITE_TITLE;
+  if (PUB_ID.startsWith('PASTE')) {
+    $('setName').textContent = 'Setup needed';
+    $('status').textContent = 'Add your published sheet ID and Index gid at the top of the script in index.html.';
+    return;
+  }
+  try {
+    const idx = await loadCSV(INDEX_GID);
+    appearances = idx
+      .map(r => ({ gid: r['gid'], festival: r['festival'] || r['tab'], date: r['date'], location: r['location'], order: parseFloat(r['order']) || 0 }))
+      .filter(a => a.gid)
+      .sort((a, b) => a.order - b.order);
+  } catch (e) {
+    $('setName').textContent = 'Setlists unavailable';
+    $('status').textContent = `Couldn't load the Index tab. ${e.message} Check PUB_ID and INDEX_GID.`;
+    return;
+  }
+
+  $('appearances').innerHTML = appearances.map(a =>
+    `<li><button type="button" data-gid="${esc(a.gid)}">${esc(a.festival)}${a.date ? `<small>${esc(a.date)}</small>` : ''}</button></li>`).join('');
+  $('picker').innerHTML = appearances.map(a => `<option value="${esc(a.gid)}">${esc(a.festival)}${a.date ? ` (${esc(a.date)})` : ''}</option>`).join('');
+
+  $('appearances').addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (b) showAppearance(b.dataset.gid);
+  });
+  $('picker').addEventListener('change', e => showAppearance(e.target.value));
+
+  const h = readHash();
+  showAppearance(h.gid || appearances[0]?.gid, h.track);
+}
+
+init();
+</script>
+</body>
+</html>
