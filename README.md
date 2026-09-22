@@ -142,6 +142,7 @@ Most things happen on their own:
 - Gigs appear newest first. Each city expands to show its dates (MM/DD/YYYY).
 - Tracks are ordered by Unique ID. Rows without a Unique ID, and notes rows, are left out.
 - Tracks marked Unknown for both artist and title show as "Unknown - Unknown" and are never searched.
+- The nightly search works newest gig first, down each setlist in order.
 - Once a track has a YouTube link, it is never searched again.
 - A song played at several gigs shares one link.
 - Link priority: a visitor's submitted link, then a link fans added in the community sheet,
