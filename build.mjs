@@ -206,38 +206,165 @@ ${count ? playerBar.replace('<!--shuffle-->', '') + tracklist(a) : '<p class="em
 // The home page is the most recent gig's setlist.
 const homePage = list => setPage(list[0], list, '', true);
 
-// The All songs page comes straight from the megalist tab of the spreadsheet: one row
-// per song, ranked by its plays count when the tab has one, otherwise in the tab's order.
+// Tags that fold an entry into the original song: it's the same record, just labelled
+// differently.
+const STRIP_TAG = /(?:2\s*many\s*dj'?s|despacio)\s+(?:re-?)?edit|unknown\s+(?:version|edit)|remaster(?:ed)?|single\s+version|album\s+version|original\s+mix|radio\s+(?:edit|version|mix)/i;
+
+// Tags that name the definitive version. They merge with the plain entry and their title
+// is the one shown: "Kiss (Extended Mix)" over "Kiss".
+const DEFINITIVE_TAG = /vocal\s+mix|extended\s+(?:mix|version|edit)|(?:12|7)\s*(?:["“”]|\s*inch)\s*(?:single\s*)?(?:version|mix|edit)?/i;
+
+// Tags for a different recording. Each one is its own song, and a plain entry of the same
+// title folds into it rather than sitting alongside it as a duplicate.
+const OTHER_TAG = /remix|(?:club|dance|disco)\s+mix|instrumental|\bdub\b|a-?cappella|\blive\b|\bdemo\b|session|\bmono\b|reprise|bootleg|rework|\bvip\b|re-?edit|\bedit\b|\bpart\s*\d/i;
+
+// Parts are separate tracks, so a plain entry never folds into one.
+const PART_TAG = /\bpart\s*\d/i;
+
+// Strips a tag from a title, whether bracketed or after a dash.
+function stripTag(title, tag) {
+  let t = String(title || '').trim();
+  t = t.replace(/\s*[([][^)\]]*[)\]]/g, m => (tag.test(m) ? ' ' : m));
+  t = t.replace(/\s+[-–—]\s+[^-–—]*$/, m => (tag.test(m) ? '' : m));
+  return t.replace(/\s+/g, ' ').trim() || String(title || '').trim();
+}
+
+// For display: only the "same record" tags come off.
+const displayTitle = title => stripTag(title, STRIP_TAG);
+
+// For grouping: every version tag comes off, so all versions of a song sit together.
+const baseTitle = title => stripTag(stripTag(displayTitle(title), DEFINITIVE_TAG), OTHER_TAG);
+
+// Which recording this entry is: "" for the original (and definitive versions), or the
+// tag itself, e.g. "soulwaxremix", so each recording gets its own row.
+function variantKey(title) {
+  const t = displayTitle(title);
+  const parts = [];
+  (t.match(/[([][^)\]]*[)\]]/g) || []).forEach(m => { if (OTHER_TAG.test(m)) parts.push(m); });
+  const dash = t.match(/\s+[-–—]\s+[^-–—]*$/);
+  if (dash && OTHER_TAG.test(dash[0])) parts.push(dash[0]);
+  return parts.join(' ').toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+// Punctuation and brackets are ignored when grouping, so "(Soulwax Remix)" and
+// "Soulwax Remix" are one song.
+const normalize = v => String(v || '').toLowerCase()
+  .replace(/\bfeat(uring)?\.?\b[^)\]]*/g, ' ')
+  .replace(/\band\b/g, '&')
+  .replace(/\bthe\b/g, ' ')
+  .replace(/[^a-z0-9&]+/g, '');
+
+const songKey = t => `${normalize(t['artist'])}|${normalize(baseTitle(t['song title']))}`;
+
+// Which spelling to show: a definitive version wins, then the bracketed spelling,
+// then the shortest.
+const preferredTitle = titles =>
+  titles.find(t => DEFINITIVE_TAG.test(t) && t.includes('(')) ||
+  titles.find(t => DEFINITIVE_TAG.test(t)) ||
+  titles.find(t => t.includes('(')) ||
+  titles.slice().sort((a, b) => a.length - b.length)[0];
+
+// The All songs page comes straight from the megalist tab of the spreadsheet. Versions of
+// the same song are merged into one row, ranked by plays when the tab counts them.
 // Songs with no link are listed too; Shuffle only picks from the ones that can be played.
 function allSongsPage(list, megalist) {
-  const ranked = megalist
+  // Group by song, then by which recording each entry is.
+  const groups = new Map();
+  megalist
     .filter(t => t['song title'] && !(isUnknown(t['artist']) && isUnknown(t['song title'])))
+    .forEach(t => {
+      const k = songKey(t);
+      if (!k || k === '|') return;
+      const group = groups.get(k) || new Map();
+      group.base = group.base || baseTitle(t['song title']);
+      group.artist = group.artist || normalize(t['artist']);
+      const vk = variantKey(t['song title']);
+      const v = group.get(vk) || { track: t, titles: [], plays: 0, versions: 0, yt: '', tag: vk };
+      v.titles.push(displayTitle(t['song title']));
+      v.plays += parseFloat(t['plays'] || 0) || 0;
+      v.versions++;
+      if (!v.yt && ytId(t['youtube'])) { v.yt = ytId(t['youtube']); v.track = t; }
+      group.set(vk, v);
+      groups.set(k, group);
+    });
+
+  // "You Make Me Feel Soulwax Remix" without brackets can't be stripped like "(Soulwax
+  // Remix)", so it lands in its own group. Fold any such group into the plain song whose
+  // title it starts with, keeping the leftover words as its recording tag.
+  const byArtist = new Map();
+  groups.forEach((group, k) => {
+    const list = byArtist.get(group.artist) || [];
+    list.push({ k, group, norm: normalize(group.base) });
+    byArtist.set(group.artist, list);
+  });
+  byArtist.forEach(list => {
+    list.slice().sort((a, b) => b.norm.length - a.norm.length).forEach(entry => {
+      if (!OTHER_TAG.test(entry.group.base)) return; // no stray tag in this title
+      const host = list
+        .filter(o => o.k !== entry.k && o.norm.length < entry.norm.length && entry.norm.startsWith(o.norm))
+        .sort((a, b) => b.norm.length - a.norm.length)[0];
+      if (!host || !groups.has(entry.k)) return;
+      const tag = entry.norm.slice(host.norm.length);
+      entry.group.forEach(v => {
+        const target = host.group.get(tag) || { track: v.track, titles: [], plays: 0, versions: 0, yt: '', tag };
+        target.titles.push(...v.titles);
+        target.plays += v.plays;
+        target.versions += v.versions;
+        if (!target.yt && v.yt) { target.yt = v.yt; target.track = v.track; }
+        host.group.set(tag, target);
+      });
+      groups.delete(entry.k);
+    });
+  });
+
+  // A plain entry alongside "(Soulwax Remix)" or "(Live)" is the same listing twice:
+  // fold it into the tagged recording (the most played one, if there are several).
+  const songs = [];
+  groups.forEach(group => {
+    const plain = group.get('');
+    const tagged = [...group.values()].filter(v => v.tag && !PART_TAG.test(v.titles[0]));
+    if (plain && tagged.length && !plain.titles.some(t => DEFINITIVE_TAG.test(t))) {
+      const into = tagged.slice().sort((a, b) => b.plays - a.plays)[0];
+      into.plays += plain.plays;
+      into.versions += plain.versions;
+      if (!into.yt && plain.yt) { into.yt = plain.yt; into.track = plain.track; }
+      group.delete('');
+    }
+    group.forEach(v => songs.push(v));
+  });
+
+  const ranked = songs
+    .map(song => ({ ...song, title: preferredTitle(song.titles) }))
     .sort((a, b) =>
-      (parseFloat(b['plays'] || 0) - parseFloat(a['plays'] || 0)) ||
-      (parseFloat(a['position']) - parseFloat(b['position'])));
+      (b.plays - a.plays) ||
+      String(a.track['artist']).localeCompare(String(b.track['artist'])) ||
+      a.title.localeCompare(b.title));
 
   let rank = 0, lastPlays = null;
-  const items = ranked.map((t, i) => {
-    const plays = parseFloat(t['plays'] || 0);
-    if (plays !== lastPlays) { rank = i + 1; lastPlays = plays; }
-    const yt = ytId(t['youtube']);
-    const play = yt
-      ? `<button type="button" class="play" data-yt="${yt}" aria-expanded="false" aria-label="Play ${esc(t['song title'])} on YouTube">Play</button>`
+  const items = ranked.map((song, i) => {
+    if (song.plays !== lastPlays) { rank = i + 1; lastPlays = song.plays; }
+    const t = song.track;
+    const play = song.yt
+      ? `<button type="button" class="play" data-yt="${song.yt}" aria-expanded="false" aria-label="Play ${esc(song.title)} on YouTube">Play</button>`
       : '';
-    const fix = canSubmit ? `<button type="button" class="fix">${yt ? 'Wrong link?' : 'Add link'}</button>` : '';
-    return `<li class="track" id="s-${esc(slugify(t['unique id']) || String(i + 1))}" data-gid="${esc(t['gid'])}" data-id="${esc(t['unique id'])}">
-  <span class="pos">${plays ? rank : ''}</span>
+    const fix = canSubmit ? `<button type="button" class="fix">${song.yt ? 'Wrong link?' : 'Add link'}</button>` : '';
+    const meta = [
+      song.plays ? `${song.plays} residenc${song.plays === 1 ? 'y' : 'ies'}` : '',
+      song.versions > 1 ? `${song.versions} versions` : '',
+    ].filter(Boolean).join(', ');
+    return `<li class="track" id="s-${esc(slugify(song.title) || String(i + 1))}" data-gid="${esc(t['gid'])}" data-id="${esc(t['unique id'])}">
+  <span class="pos">${song.plays ? rank : ''}</span>
   <span class="song">
-    <span class="title">${esc(t['song title'])}</span>
+    <span class="title">${esc(song.title)}</span>
     ${t['artist'] ? `<span class="artist">${esc(t['artist'])}</span>` : ''}
-    ${plays ? `<span class="count">${plays} residenc${plays === 1 ? 'y' : 'ies'}</span>` : ''}
+    ${meta ? `<span class="count">${meta}</span>` : ''}
   </span>
   <span class="sources">${play}${fix}</span>
   <div class="player" hidden></div>
 </li>`;
   }).join('\n');
 
-  const ranksShown = ranked.some(t => parseFloat(t['plays'] || 0) > 0);
+  const ranksShown = ranked.some(song => song.plays > 0);
   return page({
     list, current: 'songs', root: '../',
     title: `All songs | ${config.siteTitle}`,
@@ -245,6 +372,10 @@ function allSongsPage(list, megalist) {
     main: `<h1>All songs</h1>
 <p class="event">${ranked.length} songs${ranksShown ? ', ranked by how many residencies played them' : ''}.</p>
 ${playerBar.replace('<!--shuffle-->', shuffleButton)}
+<div class="filter">
+  <input type="search" id="song-filter" placeholder="Filter by song or artist" autocomplete="off" aria-label="Filter songs">
+  <p class="filter-count" aria-live="polite"></p>
+</div>
 <ol class="tracks">
 ${items}
 </ol>`,
