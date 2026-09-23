@@ -57,13 +57,15 @@
     const i = current ? list.indexOf(current) : -1;
     bar.querySelector('[data-action="prev"]').disabled = !shuffle && i <= 0;
     bar.querySelector('[data-action="next"]').disabled = !shuffle && i >= list.length - 1 && i !== -1;
+    const shuffleNote = shuffle ? 'Shuffle on' : '';
     if (current) {
-      const pos = current.querySelector('.pos').textContent;
+      const pos = current.querySelector('.pos').textContent.trim();
       const title = current.querySelector('.title').textContent;
       const artist = current.querySelector('.artist');
-      nowEl.textContent = `${pos}  ${title}${artist ? `, ${artist.textContent}` : ''}`;
+      const line = `${pos ? pos + '  ' : ''}${title}${artist ? `, ${artist.textContent}` : ''}`;
+      nowEl.textContent = shuffleNote ? `${line} · ${shuffleNote}` : line;
     } else {
-      nowEl.textContent = '';
+      nowEl.textContent = shuffleNote;
     }
   }
 

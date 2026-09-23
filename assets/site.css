@@ -78,9 +78,10 @@ html { scroll-behavior: smooth; }
 .controls .toggle[data-state="paused"] .i-pause, .controls .toggle[data-state="playing"] .i-play { display: none; }
 .controls .btn:disabled { opacity: .35; cursor: default; }
 .controls .shuffle[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.now:empty::before { content: "Nothing playing"; }
 .controls .btn:disabled:hover { border-color: var(--muted); }
 .now { flex: 1 1 12rem; margin: 0; color: var(--muted); font-size: .95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.now:empty::before { content: "Nothing playing"; }
+
 .autoplay { display: flex; align-items: center; gap: .5rem; cursor: pointer; }
 .autoplay input {
   appearance: none; -webkit-appearance: none; margin: 0; cursor: pointer;
