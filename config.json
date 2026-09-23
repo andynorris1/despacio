@@ -4,5 +4,6 @@
   "tracksGid": "1551958996",
   "submitUrl": "https://script.google.com/macros/s/AKfycbxBwXKswXjZN8Gs2oNgz8ih_ISDVqrOQzofTl52Kbo2OjMKZ5nyVm5gbGHsNca8BNMInA/exec",
   "siteTitle": "Despacio Tracklists",
-  "minTracks": 25
+  "minTracks": 25,
+  "allSongsTab": "megalist"
 }

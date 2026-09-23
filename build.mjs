@@ -448,7 +448,13 @@ async function build() {
   const byGid = {};
   tracks.forEach(t => { (byGid[t['gid']] ||= []).push(t); });
   // The megalist tab has no page of its own; it feeds the All songs page.
-  const megalist = tracks.filter(t => /^megalist$/i.test(t['appearance'] || ''));
+  const allSongsTab = (config.allSongsTab || 'megalist').trim().toLowerCase();
+  const megalist = tracks.filter(t => String(t['appearance'] || '').trim().toLowerCase() === allSongsTab);
+  if (!megalist.length) {
+    const names = [...new Set(tracks.map(t => String(t['appearance'] || '').trim()))];
+    console.warn(`No rows for the All songs page: nothing in the Tracks tab has Appearance "${allSongsTab}".`);
+    console.warn(`Appearance values found: ${names.join(' | ') || '(none)'}`);
+  }
 
   const used = new Set();
   const list = apps
@@ -493,6 +499,7 @@ async function build() {
     await writeFile(join(dir, 'index.html'), setPage(list[i], list));
   }
   console.log(`Built ${list.length} appearance pages and ${tracks.length} tracks into ${OUT}/`);
+  console.log(`All songs page: ${megalist.length} rows from the "${allSongsTab}" tab.`);
 }
 
 function serve() {
