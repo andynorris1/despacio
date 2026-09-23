@@ -164,7 +164,7 @@ ${main}
 // Player bar above each setlist: Previous, Play/Pause, Next, what's playing, and an
 // Autoplay switch (off by default). assets/player.js makes it work.
 const icon = d => `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="${d}"/></svg>`;
-const shuffleButton = `<button type="button" class="btn shuffle" data-action="shuffle" aria-pressed="false" aria-label="Shuffle">${icon('M17 3h4v4h-2V6.4l-4.3 4.3-1.4-1.4L17.6 5H17V3zm4 10v4h-4v-2h.6l-4.3-4.3 1.4-1.4L19 13.6V13h2zM3 6h4.2l2.6 2.6-1.4 1.4L6.6 8H3V6zm0 10h3.6l8.7-8.7V6h2v4h-4V8.6L7.4 18H3v-2z')}</button>`;
+const shuffleButton = `<button type="button" class="btn shuffle" data-action="shuffle" aria-pressed="false" aria-label="Shuffle" title="Shuffle">${icon('M10.6 9.2 5.4 4 4 5.4l5.2 5.2 1.4-1.4zM14.5 4l2 2L4 18.6 5.4 20 18 7.5l2 2V4h-5.5zm.3 9.4-1.4 1.4 3.1 3.1-2 2H20v-5.5l-2 2-3.2-3z')}</button>`;
 
 const playerBar = `<div class="controls" role="group" aria-label="Player">
   <div class="transport">
@@ -206,69 +206,44 @@ ${count ? playerBar.replace('<!--shuffle-->', '') + tracklist(a) : '<p class="em
 // The home page is the most recent gig's setlist.
 const homePage = list => setPage(list[0], list, '', true);
 
-// Groups the same song across residencies, ignoring spelling differences the way the
-// sheet script does, so "Hall & Oates" and "Hall and Oates" count as one song.
-const songKey = t => [t['artist'], t['song title']]
-  .map(v => String(v || '').toLowerCase()
-    .replace(/[([][^)\]]*\b(?:2\s*many\s*dj'?s|despacio)\s+(?:re-?)?edit\b[^)\]]*[)\]]/g, ' ')
-    .replace(/[([][^)\]]*\bunknown\s+(?:version|edit)\b[^)\]]*[)\]]/g, ' ')
-    .replace(/\bfeat(uring)?\.?\b[^)\]]*/g, ' ')
-    .replace(/\band\b/g, '&')
-    .replace(/\bthe\b/g, ' ')
-    .replace(/[^a-z0-9&]+/g, ''))
-  .join('|');
+// The All songs page comes straight from the megalist tab of the spreadsheet: one row
+// per song, ranked by its plays count when the tab has one, otherwise in the tab's order.
+// Songs with no link are listed too; Shuffle only picks from the ones that can be played.
+function allSongsPage(list, megalist) {
+  const ranked = megalist
+    .filter(t => t['song title'] && !(isUnknown(t['artist']) && isUnknown(t['song title'])))
+    .sort((a, b) =>
+      (parseFloat(b['plays'] || 0) - parseFloat(a['plays'] || 0)) ||
+      (parseFloat(a['position']) - parseFloat(b['position'])));
 
-// Every identified song, ranked by how many residencies played it. Songs with no link
-// are listed too; Shuffle only picks from the ones that can be played.
-function allSongsPage(list) {
-  const songs = new Map();
-  list.filter(a => a.year).forEach(a => a.tracks.forEach(t => {
-    const title = t['song title'];
-    if (isUnknown(t['artist']) && isUnknown(title)) return;
-    if (!title) return;
-    const k = songKey(t);
-    if (!k) return;
-    const song = songs.get(k) || { track: t, gigs: new Set(), yt: '' };
-    song.gigs.add(a.gid);
-    if (!song.yt) song.yt = ytId(t['youtube']);
-    if (!song.track['youtube'] && t['youtube']) song.track = t; // prefer a row with a link
-    songs.set(k, song);
-  }));
-
-  const ranked = [...songs.values()].sort((a, b) =>
-    (b.gigs.size - a.gigs.size) ||
-    String(a.track['artist']).localeCompare(String(b.track['artist'])) ||
-    String(a.track['song title']).localeCompare(String(b.track['song title'])));
-
-  let rank = 0, lastCount = null;
-  const items = ranked.map((song, i) => {
-    if (song.gigs.size !== lastCount) { rank = i + 1; lastCount = song.gigs.size; }
-    const t = song.track;
-    const n = song.gigs.size;
-    const play = song.yt
-      ? `<button type="button" class="play" data-yt="${song.yt}" aria-expanded="false" aria-label="Play ${esc(t['song title'])} on YouTube">Play</button>`
+  let rank = 0, lastPlays = null;
+  const items = ranked.map((t, i) => {
+    const plays = parseFloat(t['plays'] || 0);
+    if (plays !== lastPlays) { rank = i + 1; lastPlays = plays; }
+    const yt = ytId(t['youtube']);
+    const play = yt
+      ? `<button type="button" class="play" data-yt="${yt}" aria-expanded="false" aria-label="Play ${esc(t['song title'])} on YouTube">Play</button>`
       : '';
-    const fix = canSubmit
-      ? `<button type="button" class="fix">${song.yt ? 'Wrong link?' : 'Add link'}</button>`
-      : '';
-    return `<li class="track" id="s-${esc(slugify(songKey(t)) || String(i + 1))}" data-gid="${esc(t['gid'])}" data-id="${esc(t['unique id'])}">
-  <span class="pos">${rank}</span>
+    const fix = canSubmit ? `<button type="button" class="fix">${yt ? 'Wrong link?' : 'Add link'}</button>` : '';
+    return `<li class="track" id="s-${esc(slugify(t['unique id']) || String(i + 1))}" data-gid="${esc(t['gid'])}" data-id="${esc(t['unique id'])}">
+  <span class="pos">${plays ? rank : ''}</span>
   <span class="song">
     <span class="title">${esc(t['song title'])}</span>
     ${t['artist'] ? `<span class="artist">${esc(t['artist'])}</span>` : ''}
-    <span class="count">${n} residenc${n === 1 ? 'y' : 'ies'}</span>
+    ${plays ? `<span class="count">${plays} residenc${plays === 1 ? 'y' : 'ies'}</span>` : ''}
   </span>
   <span class="sources">${play}${fix}</span>
   <div class="player" hidden></div>
 </li>`;
   }).join('\n');
 
+  const ranksShown = ranked.some(t => parseFloat(t['plays'] || 0) > 0);
   return page({
     list, current: 'songs', root: '../',
     title: `All songs | ${config.siteTitle}`,
-    description: `Every song identified at a Despacio residency, ranked by how many residencies played it.`,
+    description: `Every song identified at a Despacio residency${ranksShown ? ', ranked by how many residencies played it' : ''}.`,
     main: `<h1>All songs</h1>
-<p class="event">${ranked.length} songs, ranked by how many residencies played them.</p>
+<p class="event">${ranked.length} songs${ranksShown ? ', ranked by how many residencies played them' : ''}.</p>
 ${playerBar.replace('<!--shuffle-->', shuffleButton)}
 <ol class="tracks">
 ${items}
@@ -341,6 +316,8 @@ async function build() {
 
   const byGid = {};
   tracks.forEach(t => { (byGid[t['gid']] ||= []).push(t); });
+  // The megalist tab has no page of its own; it feeds the All songs page.
+  const megalist = tracks.filter(t => /^megalist$/i.test(t['appearance'] || ''));
 
   const used = new Set();
   const list = apps
@@ -377,7 +354,7 @@ async function build() {
   await mkdir(join(OUT, 'about'), { recursive: true });
   await writeFile(join(OUT, 'about', 'index.html'), aboutPage(list));
   await mkdir(join(OUT, 'songs'), { recursive: true });
-  await writeFile(join(OUT, 'songs', 'index.html'), allSongsPage(list));
+  await writeFile(join(OUT, 'songs', 'index.html'), allSongsPage(list, megalist));
 
   for (let i = 0; i < list.length; i++) {
     const dir = join(OUT, 'sets', list[i].slug);
