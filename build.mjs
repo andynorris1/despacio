@@ -199,7 +199,7 @@ function setPage(a, list, root = '../../', isHome = false) {
     description: `${a.year ? `${config.siteTitle} setlist, ${a.city}` : `${config.siteTitle}: ${a.city}`}${a.event ? `, ${a.event}` : ''}. ${count} track${count === 1 ? '' : 's'}.`,
     main: `<h1>${esc(a.label)}</h1>
 ${a.event ? `<p class="event">${esc(a.event)}</p>` : ''}
-${count ? playerBar.replace('<!--shuffle-->', '') + tracklist(a) : '<p class="empty">No tracks on this setlist yet.</p>'}`,
+${count ? playerBar.replace('<!--shuffle-->', a.year ? '' : shuffleButton) + tracklist(a) : '<p class="empty">No tracks on this setlist yet.</p>'}`,
   });
 }
 

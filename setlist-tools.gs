@@ -20,8 +20,10 @@ const CONFIG = {
   // Tabs that aren't gigs but still get a page. Order sorts them against the gig
   // numbers, so -1 puts this at the bottom of the list on the site.
   EXTRA_TABS: {
+    // The site's All songs page. It gets no page of its own in the list.
+    'megalist': { label: 'All songs', slug: 'songs', order: -2, listOnly: true, searchRank: 0 },
     'Canonical Tracks': {
-      label: 'Despacio Classics', slug: 'despacio-classics', order: -1,
+      label: 'Despacio Classics', slug: 'despacio-classics', order: -1, searchRank: -1,
       note: 'Songs played at five or more Despacio gigs.',
       // Only rows where all five "Played at" columns (C–G) have something in them,
       // i.e. songs played at five or more gigs.
@@ -33,15 +35,18 @@ const CONFIG = {
   // The header row can be anywhere in the first 15 rows of a tab.
   SOURCE_HEADERS: {
     id: ['unique id', 'uniqueid', 'unique', 'uid', 'track id', 'id'],
-    artist: ['artist', 'artists', 'artist name'],
+    // "artist title" is the megalist's name for its artist column; "track title" its title column.
+    artist: ['artist', 'artists', 'artist name', 'artist title'],
     title: ['title', 'song title', 'track title', 'song', 'track', 'song name', 'track name', 'name'],
     youtube: ['youtube'],                       // links fans have already added
     idStatus: ['identification status'],
     date: ['date'],
+    // How many times a song has been played, if the tab counts it.
+    plays: ['plays', 'times played', 'play count', 'count', 'played', 'played at', 'gigs', 'residencies', 'total'],
   },
   TRACKS: 'Tracks',
   APPEARANCES: 'Appearances',
-  TRACK_HEADERS: ['Appearance', 'gid', 'Unique ID', 'Artist', 'Song Title', 'Status', 'YouTube', 'Date', 'Position'],
+  TRACK_HEADERS: ['Appearance', 'gid', 'Unique ID', 'Artist', 'Song Title', 'Status', 'YouTube', 'Date', 'Position', 'Plays'],
   APPEARANCE_HEADERS: ['Tab', 'gid', 'City', 'Year', 'Event', 'Order', 'Slug'],
 
   // Which gig each city tab is, by the number at the start of the tab name.
@@ -84,6 +89,7 @@ function onOpen() {
   SpreadsheetApp.getUi().createMenu('Setlist tools')
     .addItem('Sync from community sheet now', 'syncFromSource')
     .addItem('Show last sync result', 'showLastSync')
+    .addItem('Report megalist duplicates', 'reportMegalistDuplicates')
     .addItem('Find YouTube links now', 'fillYouTubeLinks')
     .addSeparator()
     .addItem('Set up automatic updates', 'setUpTriggers')
@@ -166,7 +172,7 @@ function syncFromSource() {
     const years = {};   // gid → year from the tab's Date column
     const tabDates = {}; // gid → the tab's dates, to recognize gigs in GIGS_BY_DATE
     src.getSheets().forEach(s => {
-      if (!CONFIG.CITY_TAB.test(s.getName()) && !CONFIG.EXTRA_TABS[s.getName()]) return;
+      if (!CONFIG.CITY_TAB.test(s.getName()) && !extraTab_(s)) return;
       const values = s.getDataRange().getDisplayValues(); // exactly as fans see it
       const extra = extraTab_(s);
       const hr = findHeaderRow_(values, !extra);
@@ -180,6 +186,8 @@ function syncFromSource() {
       const cSt = findCol_(h, CONFIG.SOURCE_HEADERS.idStatus);
       const cDate = findCol_(h, CONFIG.SOURCE_HEADERS.date);
       const required = extra && extra.requirePlayedAt ? playedAtCols_(h, extra.requirePlayedAt) : null;
+      const cPlays = findCol_(h, CONFIG.SOURCE_HEADERS.plays);
+      const playedAt = playedAtCols_(h, 99); // "Played at 1..N" columns, if the tab has them
       tabs.push(s);
       if (cDate >= 0) {
         years[s.getSheetId()] = commonYear_(body.map(r => r[cDate]));
@@ -232,6 +240,9 @@ function syncFromSource() {
         row.community = !submitted && !!community && url === community;
         row.submitted = !!submitted;
         row[T.Date] = date || lastDate;
+        // A plays count, either from a column that holds one or by counting filled "Played at" cells.
+        if (cPlays >= 0 && String(r[cPlays]).trim()) row[T.Plays] = String(r[cPlays]).trim();
+        else if (playedAt.length) row[T.Plays] = playedAt.filter(c => String(r[c]).trim()).length;
         if (submitted) row[T.Status] = CONFIG.STATUS.SUBMITTED;
         else if (url) row[T.Status] = CONFIG.STATUS.FOUND;
         else if (isUnknown_(artist) && isUnknown_(title)) row[T.Status] = CONFIG.STATUS.UNKNOWN;
@@ -270,7 +281,7 @@ function syncFromSource() {
 function rebuildAppearances_(tabs, years, tabDates) {
   const sh = SpreadsheetApp.getActive().getSheetByName(CONFIG.APPEARANCES) || SpreadsheetApp.getActive().insertSheet(CONFIG.APPEARANCES);
   const used = new Set();
-  const rows = tabs.map(s => {
+  const rows = tabs.filter(s => !(extraTab_(s) && extraTab_(s).listOnly)).map(s => {
     const n = tabNumber_(s);
     const extra = extraTab_(s);
     const dates = tabDates[s.getSheetId()] || [];
@@ -295,6 +306,7 @@ function rebuildAppearances_(tabs, years, tabDates) {
 function playedAtCols_(headers, howMany) {
   const cols = [];
   headers.forEach((h, i) => { if (/^played at\b/.test(normHeader_(h))) cols.push(i); });
+  if (howMany === 99) return cols; // all of them, for counting plays
   return cols.length >= howMany ? cols.slice(0, howMany) : [2, 3, 4, 5, 6].slice(0, howMany);
 }
 
@@ -316,7 +328,12 @@ function commonYear_(dates) {
   return best ? Number(best) : '';
 }
 
-const extraTab_ = s => CONFIG.EXTRA_TABS[s.getName()];
+// Matches the tab name however it's capitalized or spaced ("megalist", "Megalist ").
+function extraTab_(s) {
+  const want = String(s.getName()).trim().toLowerCase();
+  const key = Object.keys(CONFIG.EXTRA_TABS).find(k => k.trim().toLowerCase() === want);
+  return key ? CONFIG.EXTRA_TABS[key] : null;
+}
 const tabNumber_ = s => extraTab_(s) ? extraTab_(s).order : Number(s.getName().match(CONFIG.CITY_TAB)[1]);
 // "15-Pasadena (TANP)" → "Pasadena"
 const tabCity_ = s => extraTab_(s) ? extraTab_(s).label
@@ -334,6 +351,100 @@ function showLastSync() {
     `Last sync: ${new Date(r.when).toLocaleString()}\n${r.tracks} tracks from ${r.cities} cities.` +
     (r.skipped.length ? `\n\nSkipped (couldn't find Unique ID, Artist and Title columns):\n${r.skipped.join('\n')}` : '\n\nNo tabs skipped.'));
 }
+
+/* ---------- Megalist duplicate report ---------- */
+
+// Writes a "Megalist Report" tab: how many entries carry each version tag, and every
+// group of entries the site would merge into one song. Read-only on the community sheet.
+function reportMegalistDuplicates() {
+  const src = SpreadsheetApp.openById(CONFIG.SOURCE_ID);
+  const tab = src.getSheets().find(s => String(s.getName()).trim().toLowerCase() === 'megalist');
+  if (!tab) { SpreadsheetApp.getUi().alert('No tab called "megalist" in the community sheet.'); return; }
+
+  const values = tab.getDataRange().getDisplayValues();
+  const hr = findHeaderRow_(values, false);
+  if (hr < 0) { SpreadsheetApp.getUi().alert('Could not find Artist and Title columns in megalist.'); return; }
+  const h = values[hr];
+  const cA = findCol_(h, CONFIG.SOURCE_HEADERS.artist);
+  const cT = findCol_(h, CONFIG.SOURCE_HEADERS.title);
+
+  const entries = values.slice(hr + 1)
+    .map(r => ({ artist: String(r[cA]).trim(), title: String(r[cT]).trim() }))
+    .filter(e => e.artist || e.title);
+
+  // How many entries mention each version tag.
+  const tags = [
+    ['2manydjs Edit', /2\s*many\s*dj'?s\s+(?:re-?)?edit/i],
+    ['Despacio Edit', /despacio\s+(?:re-?)?edit/i],
+    ['Remaster', /remaster(?:ed)?/i],
+    ['Unknown Version / Edit', /unknown\s+(?:version|edit)/i],
+    ['Remix', /remix/i],
+    ['Vocal Mix', /vocal\s+mix/i],
+    ['12" / 7" Version', /(?:12|7)\s*(?:["“”]|\s*inch)/i],
+    ['Extended Mix', /extended\s+(?:mix|version|edit)/i],
+    ['Radio Edit', /radio\s+(?:edit|mix|version)/i],
+    ['Single / Album Version, Original Mix', /single\s+version|album\s+version|original\s+mix/i],
+    ['Club / Dance / Disco Mix', /(?:club|dance|disco)\s+mix/i],
+    ['Bootleg / Rework / VIP / Re-edit', /bootleg|rework|\bvip\b|re-?edit/i],
+    ['Part 1 / 2', /\bpart\s*\d/i],
+    ['Dub', /\bdub\b/i],
+    ['Instrumental', /instrumental/i],
+    ['Live', /\blive\b/i],
+  ];
+
+  // Group the way the site does: strip the "same song" tags, ignore punctuation.
+  const groups = {};
+  entries.forEach(e => {
+    const base = baseTitle_(e.title);
+    const k = `${normSong_(e.artist)}|${normSong_(base)}`;
+    if (!groups[k]) groups[k] = { artist: e.artist, base: base, titles: [] };
+    groups[k].titles.push(e.title);
+  });
+  const dupes = Object.keys(groups).map(k => groups[k]).filter(g => g.titles.length > 1)
+    .sort((a, b) => b.titles.length - a.titles.length);
+
+  const sh = sheet_('Megalist Report', ['Artist', 'Merged title', 'Entries', 'Entries as written']);
+  sh.clear();
+  const out = [];
+  out.push(['Megalist entries', entries.length, '', '']);
+  out.push(['Songs after merging', Object.keys(groups).length, '', '']);
+  out.push(['Groups with more than one entry', dupes.length, '', '']);
+  out.push(['', '', '', '']);
+  out.push(['Entries mentioning', 'Count', '', '']);
+  tags.forEach(t => out.push([t[0], entries.filter(e => t[1].test(e.title)).length, '', '']));
+  out.push(['', '', '', '']);
+  out.push(['Artist', 'Merged title', 'Entries', 'Entries as written']);
+  dupes.forEach(g => out.push([g.artist, g.base, g.titles.length, g.titles.join('  |  ')]));
+
+  sh.getRange(1, 1, out.length, 4).setValues(out);
+  sh.getRange(1, 1, 1, 4).setFontWeight('bold');
+  sh.getRange(5, 1, 1, 2).setFontWeight('bold');
+  sh.getRange(5 + tags.length + 2, 1, 1, 4).setFontWeight('bold');
+  SpreadsheetApp.getActive().setActiveSheet(sh);
+  SpreadsheetApp.getUi().alert(`${entries.length} megalist entries, ${Object.keys(groups).length} songs after merging. See the Megalist Report tab.`);
+}
+
+// Same rules the site uses: strip the tags that mean "same song", ignore punctuation.
+const STRIP_TAG_ = /(?:2\s*many\s*dj'?s|despacio)\s+(?:re-?)?edit|unknown\s+(?:version|edit)|remaster(?:ed)?|single\s+version|album\s+version|original\s+mix|radio\s+(?:edit|version|mix)/i;
+const DEFINITIVE_TAG_ = /vocal\s+mix|extended\s+(?:mix|version|edit)|(?:12|7)\s*(?:["“”]|\s*inch)\s*(?:single\s*)?(?:version|mix|edit)?/i;
+
+function stripTag_(title, tag) {
+  let t = String(title || '').trim();
+  t = t.replace(/\s*[([][^)\]]*[)\]]/g, m => (tag.test(m) ? ' ' : m));
+  t = t.replace(/\s+[-–—]\s+[^-–—]*$/, m => (tag.test(m) ? '' : m));
+  return t.replace(/\s+/g, ' ').trim() || String(title || '').trim();
+}
+
+// Same as the site: edits and remasters fold in, and so do definitive versions.
+function baseTitle_(title) {
+  return stripTag_(stripTag_(title, STRIP_TAG_), DEFINITIVE_TAG_);
+}
+
+const normSong_ = v => String(v || '').toLowerCase()
+  .replace(/\bfeat(uring)?\.?\b[^)\]]*/g, ' ')
+  .replace(/\band\b/g, '&')
+  .replace(/\bthe\b/g, ' ')
+  .replace(/[^a-z0-9&]+/g, '');
 
 /* ---------- Sharing links between gigs ---------- */
 
@@ -354,18 +465,32 @@ const searchTitle_ = title => String(title).replace(EDIT_TAG, '').trim() || Stri
 const songKey_ = (artist, title) =>
   [artist, searchTitle_(title)].map(v => String(v).trim().toLowerCase().replace(/\s+/g, ' ')).join('|');
 
+// A looser key for matching the same song across tabs that spell it differently:
+// punctuation, "the", "&"/"and", and "feat. …" are ignored, so "Hall & Oates" matches
+// "Hall and Oates" and "Song (feat. X)" matches "Song".
+const looseKey_ = (artist, title) => [artist, searchTitle_(title)].map(v => String(v)
+  .toLowerCase()
+  .replace(/\bfeat(uring)?\.?\b[^)\]]*/g, ' ')
+  .replace(/\band\b/g, '&')
+  .replace(/\bthe\b/g, ' ')
+  .replace(/[^a-z0-9&]+/g, '')).join('|');
+
 // Tracks without a link borrow one from the same song at another gig, so each song
 // is only ever searched once. Priority: visitor-submitted, then community, then found.
 function shareLinks_(rows) {
-  const known = {};
+  const known = {}, loose = {};
   [rows.filter(r => r.submitted), rows.filter(r => r.community), rows].forEach(set => set.forEach(r => {
     const url = String(r[T.YouTube]).trim();
+    if (!url || isUnknown_(r[T['Song Title']])) return;
     const k = songKey_(r[T.Artist], r[T['Song Title']]);
-    if (url && !known[k]) known[k] = url;
+    const l = looseKey_(r[T.Artist], r[T['Song Title']]);
+    if (!known[k]) known[k] = url;
+    if (!loose[l]) loose[l] = url;
   }));
   rows.forEach(r => {
     if (String(r[T.YouTube]).trim() || isUnknown_(r[T['Song Title']])) return;
-    const url = known[songKey_(r[T.Artist], r[T['Song Title']])];
+    const url = known[songKey_(r[T.Artist], r[T['Song Title']])] ||
+                loose[looseKey_(r[T.Artist], r[T['Song Title']])];
     if (url) { r[T.YouTube] = url; r[T.Status] = CONFIG.STATUS.FOUND; }
   });
 }
@@ -386,9 +511,17 @@ function fillYouTubeLinks() {
       if (u && !known[key]) known[key] = u;
     });
 
-    // Newest gig first (the top of the site), then down each setlist in order.
-    // A song found here also covers the same song at older gigs.
-    const gigNumber = r => { const m = String(r[T.Appearance]).match(CONFIG.CITY_TAB); return m ? Number(m[1]) : 0; };
+    // Newest residency first (the top of the site), then down each setlist in order;
+    // then the megalist, then anything else. A song found anywhere covers the same song
+    // everywhere, so nothing is searched twice.
+    const gigNumber = r => {
+      const name = String(r[T.Appearance]);
+      const m = name.match(CONFIG.CITY_TAB);
+      if (m) return Number(m[1]);
+      const key = Object.keys(CONFIG.EXTRA_TABS).find(k => k.trim().toLowerCase() === name.trim().toLowerCase());
+      const rank = key && CONFIG.EXTRA_TABS[key].searchRank;
+      return typeof rank === 'number' ? rank : -1;
+    };
     const order = data.map((r, i) => i).sort((a, b) =>
       (gigNumber(data[b]) - gigNumber(data[a])) || (Number(data[a][T.Position]) - Number(data[b][T.Position])));
     const missed = {}; // songs YouTube had nothing for in this run: don't search them twice
