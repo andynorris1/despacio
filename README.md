@@ -16,7 +16,8 @@ Community sheet (TSOT)  →  Links sheet (yours)  →  GitHub build  →  Websit
 - **Community sheet**: the source of truth for setlists. Never edited by this project.
 - **Links sheet**: a Google Sheet you own. Its Apps Script copies every city tab
   (named like `21-Miami`) into a **Tracks** tab every hour, finds YouTube links nightly,
-  and receives links that visitors submit on the site.
+  and receives links that visitors submit on the site. Its **Master Songs** tab is the
+  hand-curated song list that supplies links to every residency and fills the All songs page.
 - **GitHub Actions**: every hour, `build.mjs` reads the published links sheet and writes
   one page per gig to GitHub Pages.
 
@@ -100,7 +101,9 @@ To get links sooner, choose **Setlist tools → Find YouTube links now**
   "tracksGid": "from step 3",
   "submitUrl": "from step 4",
   "siteTitle": "Despacio Tracklists",
-  "minTracks": 25
+  "minTracks": 25,
+  "allSongsTab": "Master Songs",
+  "mergeVersions": false
 }
 ```
 
@@ -125,14 +128,82 @@ Most things happen on their own:
 
 - **New tracks or corrections in the community sheet** reach the site within about two hours
   (hourly sync, then hourly build).
-- **New gigs** appear automatically when the community adds a tab named like `22-City`.
-  The year comes from the tab's Date column. To add the event name and dates under the
-  heading, add the gig to `GIGS` at the top of the Apps Script (by tab number). For an
-  upcoming gig whose tab doesn't exist yet, add it to `GIGS_BY_DATE` instead: it's matched
-  by the dates in the new tab's Date column, whatever the tab is called.
+- **New residencies** appear automatically when the community adds a tab named like `22-City`,
+  once it has 25 identified tracks. The year comes from the tab's Date column. To add the
+  event name and dates under the heading, add the gig to `GIGS` at the top of the Apps Script
+  (by tab number), or to `GIGS_BY_DATE` if the tab doesn't exist yet.
+- **New songs get links overnight**, newest residency first, then the megalist.
 - **Visitors fix wrong links** with **Wrong link? → Replace this link** on the site.
   Every change is logged in the **Submissions** tab of the links sheet. To undo one,
   paste the old link back into the Tracks tab.
+
+### The master song list (Master Songs tab)
+
+One row per song: Artist, Title, YouTube, Residencies, Notes. It is yours — the hourly sync
+never overwrites it — and it does two jobs:
+
+1. **Supplies links everywhere.** A master link beats the automatic search, links fans add in
+   the community sheet, and links visitors submit. Matched tracks show **Master** in Tracks.
+2. **Fills the All songs page**, when `config.json` has `"allSongsTab": "Master Songs"`.
+
+Matching ignores case, punctuation, brackets, "feat. …", a bracketed year, and these tags:
+2manydjs Edit, Despacio Edit, Unknown Version, Remaster, Single/Album Version, Original Mix,
+Radio Edit, Vocal Mix, Extended Mix, 12"/7" Version. So one row for "Young Americans" covers
+"(Despacio Edit)", "- Gouster; 2016 Remaster" and "[1975]" wherever they appear.
+
+A remix, live take, instrumental, dub, acappella, demo, bootleg, rework, VIP, re-edit, a named
+edit by someone else, or Part 1 / Part 2 is a different recording: give it its own row.
+
+**When curating:** keep the row whose link you want before deleting its duplicates, or paste
+that link into the row you keep. Delete the wrong row and the song is searched again and may
+come back with a different video.
+
+### Keeping the master list in step with the community sheet
+
+Every few weeks, or after a new residency is identified:
+
+1. **Setlist tools → Sync from community sheet now** — pulls in anything new.
+2. **Setlist tools → Copy megalist into master list (as written)** — appends megalist entries
+   that aren't in Master Songs yet, at the bottom, exactly as the community wrote them.
+   Nothing already in the tab is touched.
+3. **Clean the new rows** at the bottom: delete duplicates, fix titles and artists, paste links.
+4. **Setlist tools → Find YouTube links now** — searches master songs that still have no link
+   (about 90 a day; the nightly run does the rest).
+5. **Setlist tools → Report shared links** — lists songs that ended up on the same video, with a
+   verdict on whether they look like the same song. Nothing is merged; it's for review.
+
+### Menu reference (Setlist tools)
+
+| Item | What it does |
+|---|---|
+| Sync from community sheet now | Rebuilds Tracks and Appearances; applies master links; fixes swapped artist/title rows |
+| Show last sync result | Track and city counts, skipped tabs, swapped rows fixed |
+| Report megalist duplicates | Writes **Megalist Report**: version-tag counts and every group that would merge |
+| Report shared links | Writes **Shared Links Report**: songs sharing one video, with a verdict |
+| Build / refresh master song list | Appends missing songs to Master Songs, merged by the site's rules |
+| Copy megalist into master list (as written) | Appends missing megalist entries verbatim, for hand-cleaning |
+| Find YouTube links now | Runs the search immediately, within the day's quota |
+| Set up automatic updates | Hourly sync + nightly search |
+| Stop automatic updates | Removes both schedules |
+
+### Editing the links sheet by hand
+
+- **Tracks tab:** a **YouTube** link you paste stays until the next community change to that
+  track. Set its **Status** to `Submitted` to make it permanent, or to `No match` to leave the
+  track blank and stop it being searched. Everything else in Tracks is rebuilt each hour.
+- **Appearances tab:** rebuilt from `GIGS` in the Apps Script; edit there, not in the sheet.
+- **Master Songs, Submissions and any tab you create:** never touched by the sync.
+
+### config.json
+
+| Setting | What it does |
+|---|---|
+| `pubId`, `appearancesGid`, `tracksGid` | Where the site reads the published links sheet |
+| `submitUrl` | The Apps Script web app that receives link submissions |
+| `siteTitle` | Name shown on every page |
+| `minTracks` | Residencies with fewer tracks don't appear (25) |
+| `allSongsTab` | Which tab feeds the All songs page (`Master Songs`) |
+| `mergeVersions` | `false` shows that tab as written; `true` merges versions of a song |
 
 ## Rules the site follows
 
@@ -147,8 +218,10 @@ Most things happen on their own:
   track with a link starts when a video ends; it's off by default and remembered per browser.
 - Once a track has a YouTube link, it is never searched again.
 - A song played at several gigs shares one link.
-- Link priority: a visitor's submitted link, then a link fans added in the community sheet,
-  then the automatic search.
+- Link priority: the **Master Songs** tab, then a visitor's submitted link, then a link fans
+  added in the community sheet, then the automatic search.
+- Rows in the megalist with artist and title in the wrong columns are corrected during the
+  sync, using the residency tabs as the reference.
 
 ## Troubleshooting
 
